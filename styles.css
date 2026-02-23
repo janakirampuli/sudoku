@@ -385,6 +385,13 @@ html.dark-mode .cell {
   background: rgba(255, 59, 48, 0.12);
 }
 
+/* Conflict state needs extra contrast in dark mode */
+html.dark-mode .cell--conflict {
+  background: rgba(255, 59, 48, 0.24);
+  outline: 2px solid rgba(255, 59, 48, 0.50);
+  outline-offset: -2px;
+}
+
 /* thicker borders for 3x3 boxes */
 .cell[data-c="2"], .cell[data-c="5"] {
   border-right-width: 2px;
@@ -417,6 +424,9 @@ html.dark-mode .keypad {
   font-weight: 800;
   cursor: pointer;
   background: rgba(255,255,255,0.5);
+  /* Ensure keypad digits are readable in both themes.
+     (In dark mode, global button styles can make text too dark.) */
+  color: var(--s-strong);
 }
 
 html.dark-mode .key {
