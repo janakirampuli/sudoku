@@ -21,6 +21,7 @@ Firebase Console → Realtime Database → **Rules**:
         ".read": true,
 
         // Creation: allow any signed-in (anonymous) user to create a room
+        // Updates are restricted below to specific fields.
         ".write": "auth != null && !data.exists()",
 
         // Only room creator can change room status/startedAt
@@ -37,14 +38,22 @@ Firebase Console → Realtime Database → **Rules**:
             "uid": { ".validate": "newData.isString()" },
             "name": { ".validate": "newData.isString() && newData.val().length <= 24" },
             "finished": { ".validate": "newData.isBoolean()" },
-            "finishedAt": { ".validate": "newData.val() === null || newData.isNumber()" }
+            "finishedAt": { ".validate": "newData.val() === null || newData.isNumber()" },
+            "quit": { ".validate": "newData.isBoolean()" },
+            "quitAt": { ".validate": "newData.val() === null || newData.isNumber()" },
+            "online": { ".validate": "newData.isBoolean()" },
+            "lastSeen": { ".validate": "newData.val() === null || newData.isNumber()" }
           },
           "p2": {
-            ".write": "auth != null && (!data.exists() ? true : data.child('uid').val() === auth.uid)",
+            ".write": "auth != null && (!data.exists() || data.child('uid').val() === auth.uid)",
             "uid": { ".validate": "newData.isString()" },
             "name": { ".validate": "newData.isString() && newData.val().length <= 24" },
             "finished": { ".validate": "newData.isBoolean()" },
-            "finishedAt": { ".validate": "newData.val() === null || newData.isNumber()" }
+            "finishedAt": { ".validate": "newData.val() === null || newData.isNumber()" },
+            "quit": { ".validate": "newData.isBoolean()" },
+            "quitAt": { ".validate": "newData.val() === null || newData.isNumber()" },
+            "online": { ".validate": "newData.isBoolean()" },
+            "lastSeen": { ".validate": "newData.val() === null || newData.isNumber()" }
           }
         },
 

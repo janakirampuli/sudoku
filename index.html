@@ -9,27 +9,59 @@ extra_css:
 <div class="sudoku-app" id="app">
   <div class="sudoku-header">
     <div>
-      <h1 class="sudoku-title">Sudoku (2-player)</h1>
-      <p class="sudoku-subtitle">Same board. No progress sharing. You only get notified when the other player finishes.</p>
+      <h1 class="sudoku-title">Sudoku</h1>
+      <p class="sudoku-subtitle">Single-player or race a friend on the same board.</p>
     </div>
     <div class="sudoku-header__right">
-      <div class="pill" id="conn-pill">Connecting…</div>
+      <div class="pill" id="conn-pill">Single</div>
       <a class="pill pill--link" href="{{ '/projects/' | relative_url }}">All projects</a>
     </div>
   </div>
 
   <div class="card" id="screen-lobby">
-    <div class="tabs">
+    <div class="mode">
+      <div class="mode__label">Mode</div>
+      <div class="mode__buttons">
+        <button class="btn btn--primary" id="btn-mode-single" type="button">Single player</button>
+        <button class="btn" id="btn-mode-multi" type="button">2-player</button>
+      </div>
+    </div>
+
+    <div class="panel panel--active" id="panel-single">
+      <div class="form-grid">
+        <label class="field">
+          <span class="field__label">Your name</span>
+          <input id="single-name" class="field__input" placeholder="e.g. foo" maxlength="24" />
+        </label>
+
+        <label class="field">
+          <span class="field__label">Difficulty</span>
+          <select id="single-difficulty" class="field__input">
+            <option value="easy">Easy</option>
+            <option value="medium">Medium</option>
+            <option value="hard">Hard</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="actions">
+        <button class="btn btn--primary" id="btn-single-start" type="button">Start</button>
+      </div>
+    </div>
+
+    <!-- Hidden by default (single-player). JS will show this when switching to 2-player. -->
+    <div class="tabs hidden">
       <button class="tab tab--active" id="tab-create" type="button">Create</button>
       <button class="tab" id="tab-join" type="button">Join</button>
     </div>
 
-    <div class="tab-panels">
+    <!-- Hidden by default (single-player). JS will show this when switching to 2-player. -->
+    <div class="tab-panels hidden">
       <div id="panel-create" class="panel panel--active">
         <div class="form-grid">
           <label class="field">
             <span class="field__label">Your name</span>
-            <input id="create-name" class="field__input" placeholder="e.g. Janaki" maxlength="24" />
+            <input id="create-name" class="field__input" placeholder="e.g. foo" maxlength="24" />
           </label>
 
           <label class="field">
@@ -44,7 +76,6 @@ extra_css:
 
         <div class="actions">
           <button class="btn btn--primary" id="btn-create" type="button">Create room</button>
-          <div class="hint">Creates a room id you can share.</div>
         </div>
       </div>
 
@@ -52,7 +83,7 @@ extra_css:
         <div class="form-grid">
           <label class="field">
             <span class="field__label">Your name</span>
-            <input id="join-name" class="field__input" placeholder="e.g. Friend" maxlength="24" />
+            <input id="join-name" class="field__input" placeholder="e.g. jerry" maxlength="24" />
           </label>
 
           <label class="field">
@@ -78,6 +109,7 @@ extra_css:
       </div>
       <div class="room-actions">
         <button class="btn" id="btn-copy" type="button">Copy link</button>
+        <button class="btn btn--danger" id="btn-quit" type="button">Quit</button>
         <button class="btn btn--primary hidden" id="btn-start" type="button">Start game</button>
       </div>
     </div>
@@ -103,6 +135,7 @@ extra_css:
       <div class="game-actions">
         <button class="btn" id="btn-check" type="button">Check</button>
         <button class="btn" id="btn-reset" type="button">Reset</button>
+        <button class="btn btn--danger" id="btn-quit-game" type="button">Quit</button>
       </div>
     </div>
 

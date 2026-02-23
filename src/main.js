@@ -6,13 +6,22 @@ import {
 } from "./utils.js";
 import {
   createInitialState,
+  decodeGrid81,
+  encodeGrid81,
+  generateSolvedGrid,
+  makePuzzleFromSolution,
 } from "./sudoku.js";
 import { SudokuUI } from "./ui.js";
 import {
   createRoom,
   getCurrentUser,
+  getRoomOnce,
   joinRoom,
   markFinished,
+  markQuit,
+  registerOnDisconnectOffline,
+  clearOnDisconnectOffline,
+  setOnline,
   parsePuzzle,
   startGame,
   subscribeRoom,
@@ -33,9 +42,18 @@ const panelJoin = $("panel-join");
 const btnCreate = $("btn-create");
 const btnJoin = $("btn-join");
 const btnCopy = $("btn-copy");
+const btnQuit = $("btn-quit");
 const btnStart = $("btn-start");
 const btnCheck = $("btn-check");
 const btnReset = $("btn-reset");
+const btnQuitGame = $("btn-quit-game");
+
+const btnModeSingle = $("btn-mode-single");
+const btnModeMulti = $("btn-mode-multi");
+const panelSingle = $("panel-single");
+const singleName = $("single-name");
+const singleDifficulty = $("single-difficulty");
+const btnSingleStart = $("btn-single-start");
 
 const inputCreateName = $("create-name");
 const inputCreateDifficulty = $("create-difficulty");
@@ -63,12 +81,121 @@ const session = {
 
 let ui = null;
 
+let currentScreen = "lobby";
+
+let resumeMode = false;
+
+let appMode = "single"; // 'single' | 'multi'
+
+let firebaseReady = false;
+let currentSingleGameId = null;
+
 let lastOtherFinished = false;
+let lastOtherQuit = false;
+
+function sessionKey(roomId) {
+  return `sudoku:session:${roomId}`;
+}
+
+function boardKey(roomId, uid) {
+  return `sudoku:board:${roomId}:${uid}`;
+}
+
+function saveSession(roomId, data) {
+  localStorage.setItem(sessionKey(roomId), JSON.stringify(data));
+}
+
+function loadSession(roomId) {
+  try {
+    const raw = localStorage.getItem(sessionKey(roomId));
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+function clearSession(roomId) {
+  localStorage.removeItem(sessionKey(roomId));
+}
+
+function saveBoard(roomId, uid, givensStr, boardArr) {
+  const payload = {
+    givens: givensStr,
+    board: encodeGrid81(boardArr),
+    updatedAt: Date.now(),
+  };
+  localStorage.setItem(boardKey(roomId, uid), JSON.stringify(payload));
+}
+
+function loadBoard(roomId, uid, givensStr) {
+  try {
+    const raw = localStorage.getItem(boardKey(roomId, uid));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed?.givens || parsed.givens !== givensStr) return null;
+    if (!parsed?.board || typeof parsed.board !== "string") return null;
+    return decodeGrid81(parsed.board);
+  } catch {
+    return null;
+  }
+}
 
 function showScreen(which) {
+  currentScreen = which;
   elLobby.classList.toggle("hidden", which !== "lobby");
   elRoom.classList.toggle("hidden", which !== "room");
   elGame.classList.toggle("hidden", which !== "game");
+}
+
+function setMode(mode) {
+  appMode = mode;
+  const isSingle = mode === "single";
+
+  elConn.textContent = isSingle ? "Single" : (firebaseReady ? "Connected" : "2-player");
+
+  // Toggle button emphasis
+  btnModeSingle.classList.toggle("btn--primary", isSingle);
+  btnModeMulti.classList.toggle("btn--primary", !isSingle);
+
+  panelSingle.classList.toggle("panel--active", isSingle);
+
+  // Multi panels are controlled by tabs; hide them visually when in single.
+  tabCreate.closest('.tabs')?.classList.toggle("hidden", isSingle);
+  panelCreate.parentElement?.classList.toggle("hidden", isSingle);
+
+  if (isSingle) {
+    showScreen("lobby");
+  }
+}
+
+async function ensureFirebaseReady() {
+  if (firebaseReady) return;
+  elConn.textContent = "Connecting…";
+  const user = await getCurrentUser();
+  session.uid = user.uid;
+  firebaseReady = true;
+  elConn.textContent = "Connected";
+}
+
+function singleGameKey(gameId) {
+  return `sudoku:single:game:${gameId}`;
+}
+
+function saveSingleGame(gameId, data) {
+  localStorage.setItem(singleGameKey(gameId), JSON.stringify(data));
+}
+
+function loadSingleGame(gameId) {
+  try {
+    const raw = localStorage.getItem(singleGameKey(gameId));
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+function clearSingleGame(gameId) {
+  localStorage.removeItem(singleGameKey(gameId));
 }
 
 function setTabs(mode) {
@@ -135,8 +262,24 @@ function updateRoomUI(room) {
   }
   lastOtherFinished = otherFinished;
 
+  // Quit notifications
+  const otherQuit = Boolean(other?.quit);
+  if (otherQuit && !lastOtherQuit) {
+    showToast(elToast, "Other player quit.");
+  }
+  lastOtherQuit = otherQuit;
+
+  // If opponent quit, do not redirect the current player.
+  // - If you are already in game, stay there.
+  // - If you are in room/lobby, stay on room.
+  if (otherQuit) {
+    if (currentScreen !== "game") showScreen("room");
+    return;
+  }
+
   if (room.status === "started") {
-    showGame(room);
+    // Avoid re-mounting the board on every room update (prevents "restored" behavior).
+    if (!ui || currentScreen !== "game") showGame(room);
   } else {
     showScreen("room");
   }
@@ -150,6 +293,15 @@ function showGame(room) {
 
   const { puzzle, solution } = parsePuzzle(room);
   const state = createInitialState(puzzle, solution);
+  const savedBoard = loadBoard(session.roomId, session.uid, room.puzzle.givens);
+  if (savedBoard) {
+    // Restore only editable cells; givens stay unchanged.
+    for (let i = 0; i < 81; i++) {
+      if (!state.givensMask[i]) state.board[i] = savedBoard[i];
+    }
+    if (resumeMode) showToast(elToast, "Restored your board.");
+  }
+  resumeMode = false;
   const startedAt = room.startedAt ? Number(room.startedAt) : Date.now();
 
   if (ui) ui.unmount();
@@ -165,6 +317,11 @@ function showGame(room) {
         console.error(e);
       }
     },
+    onBoardChange: (board) => {
+      try {
+        saveBoard(session.roomId, session.uid, room.puzzle.givens, board);
+      } catch {}
+    },
   });
 
   ui.mount(state, startedAt);
@@ -178,22 +335,124 @@ function subscribe(roomId) {
 }
 
 async function init() {
-  try {
-    const user = await getCurrentUser();
-    session.uid = user.uid;
-    elConn.textContent = "Connected";
-  } catch (e) {
-    console.error(e);
-    elConn.textContent = "Firebase error";
-    showToast(elToast, "Firebase init failed.");
-    return;
-  }
+  // Only initialize Firebase when needed (2-player mode).
+  elConn.textContent = "Single";
 
   // If opened with ?room=...
   const roomFromUrl = getQueryParam("room");
+  const singleFromUrl = getQueryParam("single");
+  const gameFromUrl = getQueryParam("game");
+
+  if (singleFromUrl === "1" && gameFromUrl) {
+    setMode("single");
+    currentSingleGameId = gameFromUrl;
+    const game = loadSingleGame(gameFromUrl);
+    if (game?.givens && game?.solution) {
+      const state = createInitialState(decodeGrid81(game.givens), decodeGrid81(game.solution));
+      if (Array.isArray(game.board)) {
+        // legacy
+      }
+      if (typeof game.board === "string" && game.board.length === 81) {
+        const savedBoard = decodeGrid81(game.board);
+        for (let i = 0; i < 81; i++) {
+          if (!state.givensMask[i]) state.board[i] = savedBoard[i];
+        }
+      }
+
+      singleName.value = game.name || "";
+      elDifficulty.textContent = game.difficulty || "—";
+      elYou.textContent = game.name || "—";
+
+      if (ui) ui.unmount();
+      ui = new SudokuUI({
+        boardEl: elBoard,
+        keypadEl: elKeypad,
+        toastEl: elToast,
+        timerEl: elTimer,
+        onSolved: () => {},
+        onBoardChange: (board) => {
+          try {
+            saveSingleGame(gameFromUrl, {
+              ...game,
+              board: encodeGrid81(board),
+              updatedAt: Date.now(),
+            });
+          } catch {}
+        },
+      });
+      ui.mount(state, game.startedAt || Date.now());
+      showScreen("game");
+      showToast(elToast, "Restored single-player game.");
+      return;
+    }
+  }
+
   if (roomFromUrl) {
+    setMode("multi");
+
+    try {
+      await ensureFirebaseReady();
+    } catch (e) {
+      console.error(e);
+      elConn.textContent = "Firebase error";
+      showToast(elToast, "Firebase init failed.");
+      return;
+    }
+
     setTabs("join");
     inputJoinRoom.value = roomFromUrl.toUpperCase();
+
+    // Attempt auto-resume if this browser is already a player.
+    const roomId = roomFromUrl.toUpperCase();
+
+    // If we have a saved session for this room, don't show Create by default.
+    const savedSession = loadSession(roomId);
+    if (savedSession?.name) {
+      inputJoinName.value = savedSession.name;
+    }
+
+    try {
+      const room = await getRoomOnce(roomId);
+      if (room?.players?.p1?.uid === session.uid) {
+        if (room?.players?.p1?.quit) {
+          // user had quit; do not auto-resume
+          const u = new URL(window.location.href);
+          u.searchParams.delete("room");
+          window.history.replaceState({}, "", u.toString());
+          return;
+        }
+        session.roomId = roomId;
+        session.role = "p1";
+        session.name = room.players.p1.name;
+        saveSession(roomId, { role: session.role, name: session.name });
+        resumeMode = true;
+        subscribe(roomId);
+        await setOnline({ roomId, playerKey: session.role, online: true });
+        await registerOnDisconnectOffline({ roomId, playerKey: session.role });
+        showToast(elToast, "Reconnected as Player 1.");
+        return;
+      }
+      if (room?.players?.p2?.uid === session.uid) {
+        if (room?.players?.p2?.quit) {
+          const u = new URL(window.location.href);
+          u.searchParams.delete("room");
+          window.history.replaceState({}, "", u.toString());
+          return;
+        }
+        session.roomId = roomId;
+        session.role = "p2";
+        session.name = room.players.p2.name;
+        saveSession(roomId, { role: session.role, name: session.name });
+        resumeMode = true;
+        subscribe(roomId);
+        await setOnline({ roomId, playerKey: session.role, online: true });
+        await registerOnDisconnectOffline({ roomId, playerKey: session.role });
+        showToast(elToast, "Reconnected as Player 2.");
+        return;
+      }
+    } catch {
+      // ignore
+    }
   }
 }
 
@@ -201,6 +460,10 @@ tabCreate.addEventListener("click", () => setTabs("create"));
 tabJoin.addEventListener("click", () => setTabs("join"));
 
 btnCreate.addEventListener("click", async () => {
+  setMode("multi");
+  try {
+    await ensureFirebaseReady();
+  } catch {}
   const name = inputCreateName.value.trim();
   const difficulty = inputCreateDifficulty.value;
   if (!name) return showToast(elToast, "Enter your name.");
@@ -212,6 +475,8 @@ btnCreate.addEventListener("click", async () => {
     session.uid = user.uid;
     session.name = name;
 
+    saveSession(roomId, { role: session.role, name: session.name });
+
     // update URL (shareable)
     const u = new URL(window.location.href);
     u.searchParams.set("room", roomId);
@@ -220,6 +485,9 @@ btnCreate.addEventListener("click", async () => {
     subscribe(roomId);
     showScreen("room");
     showToast(elToast, "Room created.");
+
+    await setOnline({ roomId, playerKey: session.role, online: true });
+    await registerOnDisconnectOffline({ roomId, playerKey: session.role });
   } catch (e) {
     console.error(e);
     showToast(elToast, e?.message || "Create failed.");
@@ -229,6 +497,10 @@ btnCreate.addEventListener("click", async () => {
 });
 
 btnJoin.addEventListener("click", async () => {
+  setMode("multi");
+  try {
+    await ensureFirebaseReady();
+  } catch {}
   const name = inputJoinName.value.trim();
   const roomId = inputJoinRoom.value.trim().toUpperCase();
   if (!name) return showToast(elToast, "Enter your name.");
@@ -248,6 +520,8 @@ btnJoin.addEventListener("click", async () => {
       session.name = name;
     }
 
+    saveSession(roomId, { role: session.role, name: session.name });
+
     // update URL (shareable)
     const u = new URL(window.location.href);
     u.searchParams.set("room", roomId);
@@ -256,8 +530,13 @@ btnJoin.addEventListener("click", async () => {
     subscribe(roomId);
     showScreen("room");
     showToast(elToast, "Joined room.");
+    showToast(elToast, "Waiting for host to start…");
     // immediate render
     updateRoomUI(room);
+
+    // Mark quit on disconnect (tab close/crash)
+    await setOnline({ roomId, playerKey: session.role, online: true });
+    await registerOnDisconnectOffline({ roomId, playerKey: session.role });
   } catch (e) {
     console.error(e);
     showToast(elToast, e?.message || "Join failed.");
@@ -291,10 +570,138 @@ btnStart.addEventListener("click", async () => {
   }
 });
 
+async function quitNow() {
+  // Single-player quit
+  if (appMode === "single") {
+    const gameId = currentSingleGameId || getQueryParam("game");
+    if (gameId) {
+      try {
+        clearSingleGame(gameId);
+      } catch {}
+    }
+
+    if (ui) ui.unmount();
+    ui = null;
+    currentSingleGameId = null;
+
+    try {
+      const u = new URL(window.location.href);
+      u.searchParams.delete("single");
+      u.searchParams.delete("game");
+      window.history.replaceState({}, "", u.toString());
+    } catch {}
+
+    showToast(elToast, "Quit.");
+    showScreen("lobby");
+    return;
+  }
+
+  if (!session.roomId || !session.role) return;
+  try {
+    await clearOnDisconnectOffline({ roomId: session.roomId, playerKey: session.role });
+    await markQuit({ roomId: session.roomId, playerKey: session.role });
+    showToast(elToast, "You quit the room.");
+  } catch (e) {
+    console.error(e);
+    showToast(elToast, e?.message || "Quit failed.");
+  }
+  // Clear local persisted data for this room
+  try {
+    localStorage.removeItem(boardKey(session.roomId, session.uid));
+  } catch {}
+  clearSession(session.roomId);
+
+  // Stop listeners/UI
+  try {
+    session.unsub?.();
+  } catch {}
+  session.unsub = null;
+  if (ui) ui.unmount();
+  ui = null;
+
+  // Clear in-memory session
+  session.roomId = null;
+  session.role = null;
+  session.name = null;
+  lastOtherFinished = false;
+  lastOtherQuit = false;
+
+  // Remove room query param
+  try {
+    const u = new URL(window.location.href);
+    u.searchParams.delete("room");
+    window.history.replaceState({}, "", u.toString());
+  } catch {}
+
+  // Return to lobby
+  showScreen("lobby");
+}
+
+btnModeSingle.addEventListener("click", () => setMode("single"));
+btnModeMulti.addEventListener("click", () => setMode("multi"));
+
+btnSingleStart.addEventListener("click", async () => {
+  setMode("single");
+  const name = singleName.value.trim();
+  const difficulty = singleDifficulty.value;
+  if (!name) return showToast(elToast, "Enter your name.");
+
+  // Create a new single-player game and persist it
+  const gameId = crypto.randomUUID?.() || String(Date.now());
+  currentSingleGameId = gameId;
+
+  // generate locally
+  const solution = generateSolvedGrid();
+  const puzzle = makePuzzleFromSolution(solution, difficulty);
+
+  const startedAt = Date.now();
+  saveSingleGame(gameId, {
+    name,
+    difficulty,
+    startedAt,
+    givens: encodeGrid81(puzzle),
+    solution: encodeGrid81(solution),
+    board: encodeGrid81(puzzle),
+  });
+
+  // update URL
+  const u = new URL(window.location.href);
+  u.searchParams.delete("room");
+  u.searchParams.set("single", "1");
+  u.searchParams.set("game", gameId);
+  window.history.replaceState({}, "", u.toString());
+
+  // Mount UI
+  const state = createInitialState(puzzle, solution);
+  if (ui) ui.unmount();
+  ui = new SudokuUI({
+    boardEl: elBoard,
+    keypadEl: elKeypad,
+    toastEl: elToast,
+    timerEl: elTimer,
+    onSolved: () => {},
+    onBoardChange: (board) => {
+      try {
+        const cur = loadSingleGame(gameId);
+        if (!cur) return;
+        saveSingleGame(gameId, { ...cur, board: encodeGrid81(board), updatedAt: Date.now() });
+      } catch {}
+    },
+  });
+  elDifficulty.textContent = difficulty;
+  elYou.textContent = name;
+  ui.mount(state, startedAt);
+  showScreen("game");
+});
+
+btnQuit.addEventListener("click", quitNow);
+btnQuitGame.addEventListener("click", quitNow);
+
 btnCheck.addEventListener("click", () => ui?.checkNow());
 btnReset.addEventListener("click", () => ui?.resetToPuzzle());
 
 // init
 setTabs("create");
+setMode("single");
 showScreen("lobby");
 init();

@@ -5,6 +5,10 @@ function idx(r, c) {
   return r * 9 + c;
 }
 
+function blockId(r, c) {
+  return Math.floor(r / 3) * 3 + Math.floor(c / 3);
+}
+
 export class SudokuUI {
   /**
    * @param {{
@@ -13,6 +17,7 @@ export class SudokuUI {
    *  toastEl: HTMLElement,
    *  timerEl: HTMLElement,
    *  onSolved: () => void,
+   *  onBoardChange?: (board: number[]) => void,
    * }} opts
    */
   constructor(opts) {
@@ -21,6 +26,7 @@ export class SudokuUI {
     this.toastEl = opts.toastEl;
     this.timerEl = opts.timerEl;
     this.onSolved = opts.onSolved;
+    this.onBoardChange = opts.onBoardChange;
 
     this._cells = [];
     this._selected = { r: 0, c: 0 };
@@ -61,6 +67,7 @@ export class SudokuUI {
       if (!givensMask[i]) this._state.board[i] = 0;
     }
     this._syncAllCells();
+    this.onBoardChange?.(this._state.board.slice());
     showToast(this.toastEl, "Reset.");
   }
 
@@ -98,6 +105,11 @@ export class SudokuUI {
         cell.className = "cell";
         cell.dataset.r = String(r);
         cell.dataset.c = String(c);
+
+        // alternate 3x3 blocks
+        const b = blockId(r, c);
+        cell.classList.add(b % 2 === 0 ? "cell--block-a" : "cell--block-b");
+
         cell.tabIndex = 0;
         cell.addEventListener("click", () => this._select(r, c));
 
@@ -135,6 +147,7 @@ export class SudokuUI {
       }
     }
     this._applyConflicts();
+    this._applySameNumberHighlight();
   }
 
   _applyConflicts() {
@@ -159,6 +172,19 @@ export class SudokuUI {
     this._cells[idx(prev.r, prev.c)]?.classList.remove("cell--selected");
     this._selected = { r, c };
     this._cells[idx(r, c)]?.classList.add("cell--selected");
+
+    this._applySameNumberHighlight();
+  }
+
+  _applySameNumberHighlight() {
+    if (!this._state) return;
+    const { r, c } = this._selected;
+    const selectedVal = this._state.board[idx(r, c)];
+    for (let i = 0; i < 81; i++) {
+      const cell = this._cells[i];
+      const val = this._state.board[i];
+      cell.classList.toggle("cell--same", selectedVal !== 0 && val === selectedVal);
+    }
   }
 
   _inputValue(n) {
@@ -170,6 +196,7 @@ export class SudokuUI {
 
     this._state.board[i] = n;
     this._syncAllCells();
+    this.onBoardChange?.(this._state.board.slice());
 
     if (isSolved(this._state.board, this._state.solution)) {
       showToast(this.toastEl, "Solved!");

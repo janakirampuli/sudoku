@@ -7,7 +7,7 @@ import {
 } from "./sudoku.js";
 import { randomRoomId } from "./utils.js";
 
-const { get, set, update, runTransaction, serverTimestamp } = dbApi;
+const { get, set, update, runTransaction, serverTimestamp, onDisconnect } = dbApi;
 
 function roomPath(roomId) {
   return `rooms/${roomId}`;
@@ -71,41 +71,40 @@ export async function joinRoom({ roomId, name }) {
   const existing = await get(dbRef(path));
   if (!existing.exists()) throw new Error("Room does not exist.");
 
-  // Use a transaction to claim p2 if empty.
-  const r = dbRef(path);
-  const { committed, snapshot } = await runTransaction(r, (current) => {
-    if (!current) return current;
-    const players = current.players || {};
-    const p1 = players.p1;
-    const p2 = players.p2;
-    if (!p1) return current; // malformed
-    if (p1.uid === user.uid) return current; // already host on this device
-    if (p2 && p2.uid && p2.uid !== user.uid) {
-      // already taken
-      return;
+  const room = existing.val();
+  if (room?.players?.p1?.uid === user.uid) {
+    // Host re-opening the link on the same device.
+    if (room?.players?.p1?.quit) {
+      throw new Error("You already quit this room.");
     }
+    return { user, room };
+  }
 
-    // If we already joined as p2 on this device earlier, keep joinedAt.
-    const joinedAt = p2?.uid === user.uid ? p2.joinedAt : { ".sv": "timestamp" };
-    current.players = {
-      ...players,
-      p2: {
-        uid: user.uid,
-        name,
-        joinedAt,
-        finished: p2?.uid === user.uid ? Boolean(p2.finished) : false,
-        finishedAt: p2?.uid === user.uid ? p2.finishedAt ?? null : null,
-      },
+  // Use a transaction to claim p2 if empty.
+  const p2Ref = dbRef(`${path}/players/p2`);
+  const { committed, snapshot } = await runTransaction(p2Ref, (currentP2) => {
+    // If already taken by someone else, abort.
+    if (currentP2?.uid && currentP2.uid !== user.uid) return;
+
+    // Claim (or re-claim) p2.
+    return {
+      uid: user.uid,
+      name,
+      joinedAt: currentP2?.uid === user.uid ? currentP2.joinedAt : { ".sv": "timestamp" },
+      finished: currentP2?.uid === user.uid ? Boolean(currentP2.finished) : false,
+      finishedAt: currentP2?.uid === user.uid ? currentP2.finishedAt ?? null : null,
+      quit: currentP2?.uid === user.uid ? Boolean(currentP2.quit) : false,
+      quitAt: currentP2?.uid === user.uid ? currentP2.quitAt ?? null : null,
     };
-    return current;
   });
 
   if (!committed) {
     throw new Error("Could not join. Room full or does not exist.");
   }
 
-  const room = snapshot.val();
-  return { user, room };
+  // Re-fetch full room (we only transacted on players/p2)
+  const updated = await get(dbRef(path));
+  return { user, room: updated.val() };
 }
 
 export async function getRoomOnce(roomId) {
@@ -121,18 +120,54 @@ export function subscribeRoom(roomId, cb) {
 
 export async function startGame({ roomId, userUid }) {
   const path = roomPath(roomId);
-  const r = dbRef(path);
-  const { committed } = await runTransaction(r, (current) => {
-    if (!current) return current;
-    if (current.createdBy !== userUid) return; // only host
-    if (current.status !== "waiting") return; // already started
-    if (!current.players?.p2?.uid) return; // need p2
+  // (writes restricted by rules)
 
-    current.status = "started";
-    current.startedAt = { ".sv": "timestamp" };
-    return current;
+  // Validate constraints via a read (rules also enforce host-only writes on status/startedAt).
+  const snap = await get(dbRef(path));
+  const current = snap.val();
+  if (!current) throw new Error("Room not found");
+  if (current.createdBy !== userUid) throw new Error("Only host can start");
+  if (current.status !== "waiting") throw new Error("Already started");
+  if (!current.players?.p2?.uid) throw new Error("Need Player 2");
+
+  // Write only the allowed fields.
+  await update(dbRef(path), {
+    status: "started",
+    startedAt: { ".sv": "timestamp" },
   });
+
+  const committed = true;
   if (!committed) throw new Error("Start failed.");
+}
+
+export async function markQuit({ roomId, playerKey }) {
+  const path = `${roomPath(roomId)}/players/${playerKey}`;
+  await update(dbRef(path), {
+    quit: true,
+    quitAt: serverTimestamp(),
+  });
+}
+
+export async function setOnline({ roomId, playerKey, online }) {
+  const r = dbRef(`${roomPath(roomId)}/players/${playerKey}`);
+  await update(r, {
+    online: Boolean(online),
+    lastSeen: serverTimestamp(),
+  });
+}
+
+export async function registerOnDisconnectOffline({ roomId, playerKey }) {
+  // Refresh should NOT count as quit. We only mark the user offline.
+  const r = dbRef(`${roomPath(roomId)}/players/${playerKey}`);
+  await onDisconnect(r).update({
+    online: false,
+    lastSeen: { ".sv": "timestamp" },
+  });
+}
+
+export async function clearOnDisconnectOffline({ roomId, playerKey }) {
+  const r = dbRef(`${roomPath(roomId)}/players/${playerKey}`);
+  await onDisconnect(r).cancel();
 }
 
 export async function markFinished({ roomId, playerKey }) {

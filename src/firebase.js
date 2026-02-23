@@ -2,6 +2,8 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/12.9.0/firebas
 import {
   getAuth,
   onAuthStateChanged,
+  setPersistence,
+  browserLocalPersistence,
   signInAnonymously,
 } from "https://www.gstatic.com/firebasejs/12.9.0/firebase-auth.js";
 import {
@@ -12,6 +14,7 @@ import {
   update,
   set,
   get,
+  onDisconnect,
   child,
   serverTimestamp,
   runTransaction,
@@ -52,11 +55,21 @@ export const dbApi = {
   update,
   onValue,
   off,
+  onDisconnect,
   serverTimestamp,
   runTransaction,
 };
 
 export async function ensureAnonymousAuth() {
+  // Force stable anonymous uid across refreshes.
+  // Without this, some browser setups can create a new anonymous user on reload,
+  // breaking auto-resume + board persistence.
+  try {
+    await setPersistence(auth, browserLocalPersistence);
+  } catch {
+    // ignore (fallback to Firebase default)
+  }
+
   // Returns current user (after ensuring signed in).
   const existing = auth.currentUser;
   if (existing) return existing;

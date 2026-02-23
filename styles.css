@@ -4,6 +4,13 @@
   --s-muted: rgba(0,0,0,0.65);
   --s-strong: rgba(0,0,0,0.9);
   --s-accent: var(--accent-color, #007acc);
+  --s-block-a: rgba(0, 122, 204, 0.06);
+  --s-block-b: rgba(181, 232, 83, 0.06);
+  --s-highlight: rgba(255, 204, 0, 0.20);
+
+  /* Board grid lines */
+  --s-grid-line: rgba(127, 127, 127, 0.22);
+  --s-box-line: rgba(127, 127, 127, 0.55);
 }
 
 html.dark-mode {
@@ -11,6 +18,13 @@ html.dark-mode {
   --s-card-border: rgba(200,200,200,0.18);
   --s-muted: rgba(255,255,255,0.72);
   --s-strong: rgba(255,255,255,0.9);
+  --s-block-a: rgba(0, 122, 204, 0.14);
+  --s-block-b: rgba(181, 232, 83, 0.12);
+  --s-highlight: rgba(255, 204, 0, 0.22);
+
+  /* Board grid lines (stronger contrast in dark mode) */
+  --s-grid-line: rgba(255, 255, 255, 0.12);
+  --s-box-line: rgba(255, 255, 255, 0.38);
 }
 
 .sudoku-app {
@@ -62,6 +76,26 @@ html.dark-mode {
   border-radius: 14px;
   padding: 1rem;
   backdrop-filter: blur(10px);
+}
+
+.mode {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.8rem;
+  margin-bottom: 0.9rem;
+}
+
+.mode__label {
+  font-weight: 800;
+  opacity: 0.85;
+}
+
+.mode__buttons {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 .hidden { display: none !important; }
@@ -137,11 +171,57 @@ html.dark-mode .field__input {
   padding: 0.5rem 0.75rem;
   border-radius: 10px;
   cursor: pointer;
+  transition: none;
+}
+
+.btn:hover {
+  /* Override global theme (.btn:hover) gradient/shading; keep hover minimal */
+  transform: none;
+  background: transparent;
+  box-shadow: none;
+  text-shadow: none;
+  filter: none;
+}
+
+.btn:active,
+.btn:focus {
+  background: transparent;
+  box-shadow: none;
+  text-shadow: none;
+}
+
+.tab:hover,
+.tab:active,
+.tab:focus {
+  background: transparent;
+  box-shadow: none;
+  text-shadow: none;
+  filter: none;
+}
+
+.key:hover,
+.key:active,
+.key:focus {
+  background: rgba(255,255,255,0.5);
+  box-shadow: none;
+  text-shadow: none;
+  filter: none;
+}
+
+html.dark-mode .key:hover,
+html.dark-mode .key:active,
+html.dark-mode .key:focus {
+  background: rgba(0,0,0,0.14);
 }
 
 .btn--primary {
   border-color: rgba(0,122,204,0.55);
   background: rgba(0,122,204,0.12);
+}
+
+.btn--danger {
+  border-color: rgba(255, 59, 48, 0.5);
+  background: rgba(255, 59, 48, 0.10);
 }
 
 .room-top {
@@ -223,9 +303,11 @@ html.dark-mode .field__input {
 .board-wrap {
   margin-top: 1rem;
   display: grid;
-  grid-template-columns: 1fr 180px;
+  /* Don't let the board column stretch to full width; keep the board+keypad as a centered block */
+  grid-template-columns: auto 180px;
   gap: 1rem;
   align-items: start;
+  justify-content: center;
 }
 
 @media (max-width: 860px) {
@@ -237,7 +319,10 @@ html.dark-mode .field__input {
 .board {
   display: grid;
   grid-template-columns: repeat(9, 1fr);
-  border: 2px solid rgba(127,127,127,0.45);
+  /* Comfortable "average" size on desktop, but still responsive on smaller screens */
+  width: clamp(560px, 60vw, 600px);
+  max-width: 100%;
+  border: 2px solid var(--s-box-line);
   border-radius: 12px;
   overflow: hidden;
 }
@@ -248,12 +333,35 @@ html.dark-mode .field__input {
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid rgba(127,127,127,0.22);
+  border: 1px solid var(--s-grid-line);
   background: rgba(255,255,255,0.5);
   user-select: none;
   cursor: pointer;
   font-weight: 800;
   font-size: 1.05rem;
+}
+
+/* Subgrid styling (alternating 3x3 blocks) */
+.cell--block-a {
+  /* keep subtle; block separation is primarily via box lines */
+  background: inherit;
+}
+
+.cell--block-b {
+  background: inherit;
+}
+
+html.dark-mode .cell--block-a {
+  background: inherit;
+}
+
+html.dark-mode .cell--block-b {
+  background: inherit;
+}
+
+/* Highlight all identical numbers to selected cell */
+.cell--same {
+  background: var(--s-highlight) !important;
 }
 
 html.dark-mode .cell {
@@ -278,8 +386,15 @@ html.dark-mode .cell {
 }
 
 /* thicker borders for 3x3 boxes */
-.cell[data-c="2"], .cell[data-c="5"] { border-right-width: 2px; }
-.cell[data-r="2"], .cell[data-r="5"] { border-bottom-width: 2px; }
+.cell[data-c="2"], .cell[data-c="5"] {
+  border-right-width: 2px;
+  border-right-color: var(--s-box-line);
+}
+
+.cell[data-r="2"], .cell[data-r="5"] {
+  border-bottom-width: 2px;
+  border-bottom-color: var(--s-box-line);
+}
 
 .keypad {
   border: 1px solid var(--s-card-border);
