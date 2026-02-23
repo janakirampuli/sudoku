@@ -320,7 +320,10 @@ html.dark-mode .key:focus {
   display: grid;
   grid-template-columns: repeat(9, 1fr);
   /* Comfortable "average" size on desktop, but still responsive on smaller screens */
-  width: clamp(560px, 60vw, 600px);
+  /* Use vmin so the board never overflows the viewport on phones.
+     - 92vmin ~ 92% of the smaller viewport dimension (usually width on mobile)
+     - clamp keeps desktop sizing pleasant */
+  width: clamp(260px, 82vmin, 600px);
   max-width: 100%;
   border: 2px solid var(--s-box-line);
   border-radius: 12px;
