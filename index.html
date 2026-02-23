@@ -1,0 +1,118 @@
+---
+layout: default
+title: Sudoku
+permalink: /projects/sudoku/
+extra_css:
+  - /projects/sudoku/styles.css
+---
+
+<div class="sudoku-app" id="app">
+  <div class="sudoku-header">
+    <div>
+      <h1 class="sudoku-title">Sudoku (2-player)</h1>
+      <p class="sudoku-subtitle">Same board. No progress sharing. You only get notified when the other player finishes.</p>
+    </div>
+    <div class="sudoku-header__right">
+      <div class="pill" id="conn-pill">Connecting…</div>
+      <a class="pill pill--link" href="{{ '/projects/' | relative_url }}">All projects</a>
+    </div>
+  </div>
+
+  <div class="card" id="screen-lobby">
+    <div class="tabs">
+      <button class="tab tab--active" id="tab-create" type="button">Create</button>
+      <button class="tab" id="tab-join" type="button">Join</button>
+    </div>
+
+    <div class="tab-panels">
+      <div id="panel-create" class="panel panel--active">
+        <div class="form-grid">
+          <label class="field">
+            <span class="field__label">Your name</span>
+            <input id="create-name" class="field__input" placeholder="e.g. Janaki" maxlength="24" />
+          </label>
+
+          <label class="field">
+            <span class="field__label">Difficulty</span>
+            <select id="create-difficulty" class="field__input">
+              <option value="easy">Easy</option>
+              <option value="medium">Medium</option>
+              <option value="hard">Hard</option>
+            </select>
+          </label>
+        </div>
+
+        <div class="actions">
+          <button class="btn btn--primary" id="btn-create" type="button">Create room</button>
+          <div class="hint">Creates a room id you can share.</div>
+        </div>
+      </div>
+
+      <div id="panel-join" class="panel">
+        <div class="form-grid">
+          <label class="field">
+            <span class="field__label">Your name</span>
+            <input id="join-name" class="field__input" placeholder="e.g. Friend" maxlength="24" />
+          </label>
+
+          <label class="field">
+            <span class="field__label">Room ID</span>
+            <input id="join-room" class="field__input" placeholder="e.g. 7K2P9Q" maxlength="12" />
+          </label>
+        </div>
+
+        <div class="actions">
+          <button class="btn btn--primary" id="btn-join" type="button">Join room</button>
+          <div class="hint">Or open a share link that already has the room id.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card hidden" id="screen-room">
+    <div class="room-top">
+      <div>
+        <div class="room-title">Room</div>
+        <div class="room-id" id="room-id">—</div>
+        <div class="room-sub" id="room-sub">—</div>
+      </div>
+      <div class="room-actions">
+        <button class="btn" id="btn-copy" type="button">Copy link</button>
+        <button class="btn btn--primary hidden" id="btn-start" type="button">Start game</button>
+      </div>
+    </div>
+    <div class="players" id="players"></div>
+  </div>
+
+  <div class="card hidden" id="screen-game">
+    <div class="game-top">
+      <div class="game-meta">
+        <div class="meta-item">
+          <div class="meta-label">Time</div>
+          <div class="meta-value" id="timer">00:00</div>
+        </div>
+        <div class="meta-item">
+          <div class="meta-label">Difficulty</div>
+          <div class="meta-value" id="difficulty">—</div>
+        </div>
+        <div class="meta-item">
+          <div class="meta-label">You</div>
+          <div class="meta-value" id="you">—</div>
+        </div>
+      </div>
+      <div class="game-actions">
+        <button class="btn" id="btn-check" type="button">Check</button>
+        <button class="btn" id="btn-reset" type="button">Reset</button>
+      </div>
+    </div>
+
+    <div class="board-wrap">
+      <div class="board" id="board"></div>
+      <div class="keypad" id="keypad"></div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+</div>
+
+<script type="module" src="{{ '/projects/sudoku/src/main.js' | relative_url }}"></script>
