@@ -118,11 +118,12 @@ function clearSession(roomId) {
   localStorage.removeItem(sessionKey(roomId));
 }
 
-function saveBoard(roomId, uid, givensStr, boardArr) {
+function saveBoard(roomId, uid, givensStr, boardArr, meta = null) {
   const payload = {
     givens: givensStr,
     board: encodeGrid81(boardArr),
     updatedAt: Date.now(),
+    ...(meta && typeof meta === "object" ? meta : {}),
   };
   localStorage.setItem(boardKey(roomId, uid), JSON.stringify(payload));
 }
@@ -134,7 +135,12 @@ function loadBoard(roomId, uid, givensStr) {
     const parsed = JSON.parse(raw);
     if (!parsed?.givens || parsed.givens !== givensStr) return null;
     if (!parsed?.board || typeof parsed.board !== "string") return null;
-    return decodeGrid81(parsed.board);
+
+    return {
+      board: decodeGrid81(parsed.board),
+      solved: Boolean(parsed.solved),
+      solvedElapsedMs: Number.isFinite(parsed.solvedElapsedMs) ? Number(parsed.solvedElapsedMs) : null,
+    };
   } catch {
     return null;
   }
@@ -259,6 +265,15 @@ function updateRoomUI(room) {
   const otherFinished = Boolean(other?.finished);
   if (otherFinished && !lastOtherFinished) {
     showToast(elToast, "Other player completed the game.");
+
+    // If the opponent finishes first, give the current player a small consolation confetti.
+    const me = room.players?.[session.role];
+    const iFinished = Boolean(me?.finished);
+    if (!iFinished) {
+      try {
+        ui?.celebrateLoser?.();
+      } catch {}
+    }
   }
   lastOtherFinished = otherFinished;
 
@@ -293,7 +308,8 @@ function showGame(room) {
 
   const { puzzle, solution } = parsePuzzle(room);
   const state = createInitialState(puzzle, solution);
-  const savedBoard = loadBoard(session.roomId, session.uid, room.puzzle.givens);
+  const saved = loadBoard(session.roomId, session.uid, room.puzzle.givens);
+  const savedBoard = saved?.board;
   if (savedBoard) {
     // Restore only editable cells; givens stay unchanged.
     for (let i = 0; i < 81; i++) {
@@ -302,7 +318,17 @@ function showGame(room) {
     if (resumeMode) showToast(elToast, "Restored your board.");
   }
   resumeMode = false;
-  const startedAt = room.startedAt ? Number(room.startedAt) : Date.now();
+  const startedAtNum = Number(room?.startedAt);
+  const startedAt = Number.isFinite(startedAtNum) ? startedAtNum : Date.now();
+
+  const finishedAtNum = Number(room?.players?.[session.role]?.finishedAt);
+  const serverElapsedSolved = (Number.isFinite(finishedAtNum) && Number.isFinite(startedAtNum))
+    ? (finishedAtNum - startedAtNum)
+    : null;
+  const elapsedSolved = Number.isFinite(serverElapsedSolved)
+    ? serverElapsedSolved
+    : (Number.isFinite(saved?.solvedElapsedMs) ? saved.solvedElapsedMs : null);
+  const alreadyFinished = Boolean(room?.players?.[session.role]?.finished) || (Boolean(saved?.solved) && elapsedSolved != null);
 
   if (ui) ui.unmount();
   ui = new SudokuUI({
@@ -310,8 +336,14 @@ function showGame(room) {
     keypadEl: elKeypad,
     toastEl: elToast,
     timerEl: elTimer,
-    onSolved: async () => {
+    onSolved: async (elapsedMs) => {
       try {
+        // Persist a stable final time locally so refresh doesn't change the frozen timer,
+        // even if RTDB finishedAt isn't yet readable as a number.
+        saveBoard(session.roomId, session.uid, room.puzzle.givens, state.board, {
+          solved: true,
+          solvedElapsedMs: Number.isFinite(elapsedMs) ? Number(elapsedMs) : null,
+        });
         await markFinished({ roomId: session.roomId, playerKey: session.role });
       } catch (e) {
         console.error(e);
@@ -324,7 +356,13 @@ function showGame(room) {
     },
   });
 
-  ui.mount(state, startedAt);
+  // If we already finished (e.g., refresh after solving), freeze the timer to the stored finish time
+  // and avoid firing onSolved/markFinished again.
+  if (alreadyFinished && elapsedSolved != null) {
+    ui.mount({ ...state, forceSolved: true, solvedElapsedMs: elapsedSolved, fireSolvedCallbackOnMount: false }, startedAt);
+  } else {
+    ui.mount(state, startedAt);
+  }
 }
 
 function subscribe(roomId) {
@@ -359,6 +397,14 @@ async function init() {
         }
       }
 
+      // If this game was already solved, keep the same final elapsed time on refresh.
+      const alreadySolved = Boolean(game.solved);
+      const solvedElapsedMs = Number.isFinite(game.solvedElapsedMs) ? Number(game.solvedElapsedMs) : null;
+      const derivedSolvedElapsedMs = (alreadySolved && solvedElapsedMs == null && Number.isFinite(game.solvedAt) && Number.isFinite(game.startedAt))
+        ? (Number(game.solvedAt) - Number(game.startedAt))
+        : null;
+      const finalSolvedElapsedMs = solvedElapsedMs ?? derivedSolvedElapsedMs;
+
       singleName.value = game.name || "";
       elDifficulty.textContent = game.difficulty || "—";
       elYou.textContent = game.name || "—";
@@ -369,18 +415,33 @@ async function init() {
         keypadEl: elKeypad,
         toastEl: elToast,
         timerEl: elTimer,
-        onSolved: () => {},
-        onBoardChange: (board) => {
+        onSolved: (elapsedMs) => {
           try {
+            const cur = loadSingleGame(gameFromUrl);
+            if (!cur) return;
             saveSingleGame(gameFromUrl, {
-              ...game,
-              board: encodeGrid81(board),
+              ...cur,
+              solved: true,
+              solvedAt: Date.now(),
+              solvedElapsedMs: Number.isFinite(elapsedMs) ? Number(elapsedMs) : (cur.solvedElapsedMs ?? null),
               updatedAt: Date.now(),
             });
           } catch {}
         },
+        onBoardChange: (board) => {
+          try {
+            const cur = loadSingleGame(gameFromUrl);
+            if (!cur) return;
+            saveSingleGame(gameFromUrl, { ...cur, board: encodeGrid81(board), updatedAt: Date.now() });
+          } catch {}
+        },
       });
-      ui.mount(state, game.startedAt || Date.now());
+
+      if (alreadySolved && finalSolvedElapsedMs != null) {
+        ui.mount({ ...state, forceSolved: true, solvedElapsedMs: finalSolvedElapsedMs, fireSolvedCallbackOnMount: false }, game.startedAt || Date.now());
+      } else {
+        ui.mount(state, game.startedAt || Date.now());
+      }
       showScreen("game");
       showToast(elToast, "Restored single-player game.");
       return;
@@ -679,7 +740,19 @@ btnSingleStart.addEventListener("click", async () => {
     keypadEl: elKeypad,
     toastEl: elToast,
     timerEl: elTimer,
-    onSolved: () => {},
+    onSolved: (elapsedMs) => {
+      try {
+        const cur = loadSingleGame(gameId);
+        if (!cur) return;
+        saveSingleGame(gameId, {
+          ...cur,
+          solved: true,
+          solvedAt: Date.now(),
+          solvedElapsedMs: Number.isFinite(elapsedMs) ? Number(elapsedMs) : null,
+          updatedAt: Date.now(),
+        });
+      } catch {}
+    },
     onBoardChange: (board) => {
       try {
         const cur = loadSingleGame(gameId);

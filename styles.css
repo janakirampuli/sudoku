@@ -330,6 +330,63 @@ html.dark-mode .key:focus {
   overflow: hidden;
 }
 
+/* Solved board: subtle glow + lock cursor */
+.board--solved {
+  box-shadow:
+    0 16px 46px rgba(0,0,0,0.10),
+    0 0 0 2px rgba(181, 232, 83, 0.25);
+}
+
+.board--solved .cell {
+  cursor: default;
+}
+
+/* Celebration overlay (confetti/sprinkles) */
+.board-wrap {
+  position: relative;
+}
+
+.sudoku-celebrate-layer {
+  position: absolute;
+  left: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+  overflow: hidden;
+  z-index: 5;
+}
+
+.sudoku-confetti {
+  display: block;
+  position: absolute;
+  top: -12px;
+  transform: translate3d(0, 0, 0);
+  will-change: transform, opacity;
+  animation: sudoku-confetti-fall var(--confetti-dur, 2.6s) ease-in forwards;
+  animation-delay: var(--confetti-delay, 0s);
+}
+
+@keyframes sudoku-confetti-fall {
+  0% {
+    transform: translate3d(0, -10px, 0) rotate(0deg);
+    opacity: 0;
+  }
+  5% {
+    opacity: 0.95;
+  }
+  100% {
+    transform:
+      translate3d(var(--confetti-drift, 0px), 520px, 0)
+      rotate(var(--confetti-rot, 360deg));
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sudoku-celebrate-layer { display: none; }
+}
+
 .cell {
   position: relative;
   aspect-ratio: 1;

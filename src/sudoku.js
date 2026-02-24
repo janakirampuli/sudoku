@@ -2,6 +2,26 @@ function idx(r, c) {
   return r * 9 + c;
 }
 
+const ALL_MASK = (1 << 10) - 2; // bits 1..9 set (ignore bit 0)
+
+function bit(n) {
+  return 1 << n;
+}
+
+function popcount(x) {
+  // Brian Kernighan
+  let c = 0;
+  while (x) {
+    x &= x - 1;
+    c++;
+  }
+  return c;
+}
+
+function boxIndex(r, c) {
+  return Math.floor(r / 3) * 3 + Math.floor(c / 3);
+}
+
 function shuffled(arr) {
   const a = arr.slice();
   for (let i = a.length - 1; i > 0; i--) {
@@ -52,6 +72,102 @@ function solveBacktracking(grid) {
   return false;
 }
 
+function buildMasks(grid) {
+  const row = new Array(9).fill(0);
+  const col = new Array(9).fill(0);
+  const box = new Array(9).fill(0);
+
+  for (let i = 0; i < 81; i++) {
+    const n = grid[i];
+    if (!n) continue;
+    const r = Math.floor(i / 9);
+    const c = i % 9;
+    const b = boxIndex(r, c);
+    const m = bit(n);
+    // invalid given grid (conflict)
+    if ((row[r] & m) || (col[c] & m) || (box[b] & m)) return null;
+    row[r] |= m;
+    col[c] |= m;
+    box[b] |= m;
+  }
+
+  return { row, col, box };
+}
+
+function chooseNextCell(grid, masks) {
+  // Find the empty cell with the fewest candidates (MRV heuristic)
+  let bestIdx = -1;
+  let bestMask = 0;
+  let bestCount = 10;
+
+  for (let i = 0; i < 81; i++) {
+    if (grid[i] !== 0) continue;
+    const r = Math.floor(i / 9);
+    const c = i % 9;
+    const b = boxIndex(r, c);
+    const used = masks.row[r] | masks.col[c] | masks.box[b];
+    const cand = ALL_MASK & ~used;
+    const count = popcount(cand);
+    if (count === 0) return { i, mask: 0, count: 0 }; // dead end
+    if (count < bestCount) {
+      bestIdx = i;
+      bestMask = cand;
+      bestCount = count;
+      if (count === 1) break;
+    }
+  }
+
+  return { i: bestIdx, mask: bestMask, count: bestCount };
+}
+
+/**
+ * Count the number of valid solutions for a grid.
+ * Returns 0, 1, or >=2 (capped by `limit`).
+ *
+ * Notes:
+ * - Mutates `grid` during the search, but always backtracks (grid ends unchanged).
+ * - Uses MRV heuristic + bitmasks for speed (important during puzzle carving).
+ */
+export function countSolutions(grid, limit = 2) {
+  const masks = buildMasks(grid);
+  if (!masks) return 0;
+
+  function dfs() {
+    const next = chooseNextCell(grid, masks);
+    if (next.i === -1) return 1; // solved
+    if (next.mask === 0) return 0; // dead
+
+    const r = Math.floor(next.i / 9);
+    const c = next.i % 9;
+    const b = boxIndex(r, c);
+
+    let total = 0;
+    // iterate candidates by bits (1..9)
+    for (let n = 1; n <= 9; n++) {
+      const m = bit(n);
+      if (!(next.mask & m)) continue;
+
+      grid[next.i] = n;
+      masks.row[r] |= m;
+      masks.col[c] |= m;
+      masks.box[b] |= m;
+
+      total += dfs();
+
+      // backtrack
+      masks.row[r] &= ~m;
+      masks.col[c] &= ~m;
+      masks.box[b] &= ~m;
+      grid[next.i] = 0;
+
+      if (total >= limit) return total;
+    }
+    return total;
+  }
+
+  return dfs();
+}
+
 export function generateSolvedGrid() {
   const grid = new Array(81).fill(0);
   // Seed diagonal boxes for speed and variety
@@ -83,16 +199,22 @@ export function makePuzzleFromSolution(solution, difficulty) {
   let givens = 81;
   for (const pos of positions) {
     if (givens <= givensTarget) break;
+    if (puzzle[pos] === 0) continue;
+
     const prev = puzzle[pos];
     puzzle[pos] = 0;
-    givens--;
-    // NOTE: We currently don't enforce uniqueness (keeps deps minimal).
-    // If needed later, we can add a uniqueness-check solver.
-    if (prev === 0) {
+
+    // Enforce uniqueness: keep the removal only if the puzzle still has exactly 1 solution.
+    const solutions = countSolutions(puzzle, 2);
+    if (solutions === 1) {
+      givens--;
+    } else {
       puzzle[pos] = prev;
-      givens++;
     }
   }
+
+  // If we couldn't reach the target while keeping uniqueness, we return a slightly
+  // easier (more-givens) puzzle rather than a non-unique one.
 
   return puzzle;
 }
@@ -113,6 +235,36 @@ export function isSolved(board, solution) {
   for (let i = 0; i < 81; i++) {
     if (board[i] !== solution[i]) return false;
   }
+  return true;
+}
+
+/**
+ * Returns true if `board` is a complete, valid Sudoku solution that respects the original givens.
+ * This intentionally does NOT require matching a specific stored solution.
+ */
+export function isValidSolution(board, puzzle) {
+  if (!Array.isArray(board) || board.length !== 81) return false;
+  if (!Array.isArray(puzzle) || puzzle.length !== 81) return false;
+
+  const masks = { row: new Array(9).fill(0), col: new Array(9).fill(0), box: new Array(9).fill(0) };
+
+  for (let i = 0; i < 81; i++) {
+    const n = board[i];
+    if (n < 1 || n > 9) return false;
+
+    // must match givens
+    if (puzzle[i] !== 0 && puzzle[i] !== n) return false;
+
+    const r = Math.floor(i / 9);
+    const c = i % 9;
+    const b = boxIndex(r, c);
+    const m = bit(n);
+    if ((masks.row[r] & m) || (masks.col[c] & m) || (masks.box[b] & m)) return false;
+    masks.row[r] |= m;
+    masks.col[c] |= m;
+    masks.box[b] |= m;
+  }
+
   return true;
 }
 
@@ -140,5 +292,6 @@ export function conflictsForCell(board, r, c) {
 export function createInitialState(puzzle, solution) {
   const givensMask = puzzle.map((n) => n !== 0);
   const board = puzzle.slice();
-  return { givensMask, board, solution };
+  // keep puzzle so UI can validate "any valid solution" (not just the stored one)
+  return { givensMask, board, solution, puzzle: puzzle.slice() };
 }
