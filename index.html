@@ -10,12 +10,29 @@ extra_css:
   <div class="sudoku-header">
     <div>
       <h1 class="sudoku-title">Sudoku</h1>
-      <p class="sudoku-subtitle">Single-player or race a friend on the same board.</p>
     </div>
     <div class="sudoku-header__right">
       <div class="pill" id="conn-pill">Single</div>
       <a class="pill pill--link" href="{{ '/projects/' | relative_url }}">All projects</a>
     </div>
+  </div>
+
+  <div class="card">
+    <p>
+      <strong>Work in progress:</strong>
+      this project explores whether LLMs can solve Sudoku <em>without</em> external tools.
+    </p>
+    <p>
+      <strong>Abstract:</strong>
+      the goal is to build and study a benchmark-driven setup for Sudoku reasoning, and test a core hypothesis: models still struggle on purely computational tasks even when no external tools or orchestration should be needed (for example, solving a simple Sudoku). As long as they lack this innate computational capability, I believe they do not truly understand computation and cannot solve Sudoku reliably over very long contexts.
+      Current references include
+      <a href="https://www.percepta.ai/blog/can-llms-be-computers" target="_blank" rel="noopener noreferrer">Can LLMs be Computers?</a>,
+      and
+      <a href="https://pub.sakana.ai/sudoku/" target="_blank" rel="noopener noreferrer">Sudoku Bench</a>.
+    </p>
+    <p>
+      for now, you can play Sudoku, if you're interested :)
+    </p>
   </div>
 
   <div class="card" id="screen-lobby">

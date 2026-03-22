@@ -303,28 +303,27 @@ html.dark-mode .key:focus {
 .board-wrap {
   margin-top: 1rem;
   display: grid;
-  /* Don't let the board column stretch to full width; keep the board+keypad as a centered block */
-  grid-template-columns: auto 180px;
+  width: 100%;
+  max-width: calc(600px + 180px + 1rem);
+  margin-inline: auto;
+  grid-template-columns: minmax(0, 1fr) minmax(160px, 180px);
   gap: 1rem;
   align-items: start;
-  justify-content: center;
 }
 
 @media (max-width: 860px) {
   .board-wrap {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
+    max-width: 600px;
   }
 }
 
 .board {
   display: grid;
   grid-template-columns: repeat(9, 1fr);
-  /* Comfortable "average" size on desktop, but still responsive on smaller screens */
-  /* Use vmin so the board never overflows the viewport on phones.
-     - 92vmin ~ 92% of the smaller viewport dimension (usually width on mobile)
-     - clamp keeps desktop sizing pleasant */
-  width: clamp(260px, 82vmin, 600px);
-  max-width: 100%;
+  width: 100%;
+  max-width: 600px;
+  box-sizing: border-box;
   border: 2px solid var(--s-box-line);
   border-radius: 12px;
   overflow: hidden;
@@ -467,10 +466,20 @@ html.dark-mode .cell--conflict {
   border: 1px solid var(--s-card-border);
   border-radius: 12px;
   padding: 0.8rem;
+  width: 100%;
+  max-width: 180px;
+  box-sizing: border-box;
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 0.55rem;
   background: rgba(255,255,255,0.35);
+}
+
+@media (max-width: 860px) {
+  .keypad {
+    max-width: 360px;
+    justify-self: center;
+  }
 }
 
 html.dark-mode .keypad {
