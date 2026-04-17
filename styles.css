@@ -1,11 +1,12 @@
 :root {
+  --s-radius: 2px;
   --s-card-bg: rgba(255,255,255,0.65);
   --s-card-border: rgba(127,127,127,0.35);
   --s-muted: rgba(0,0,0,0.65);
   --s-strong: rgba(0,0,0,0.9);
   --s-accent: var(--accent-color, #007acc);
-  --s-block-a: rgba(0, 122, 204, 0.06);
-  --s-block-b: rgba(181, 232, 83, 0.06);
+  --s-block-a: rgba(255, 255, 255, 0.62);
+  --s-block-b: rgba(0, 0, 0, 0.035);
   --s-highlight: rgba(255, 204, 0, 0.20);
 
   /* Board grid lines */
@@ -18,8 +19,8 @@ html.dark-mode {
   --s-card-border: rgba(200,200,200,0.18);
   --s-muted: rgba(255,255,255,0.72);
   --s-strong: rgba(255,255,255,0.9);
-  --s-block-a: rgba(0, 122, 204, 0.14);
-  --s-block-b: rgba(181, 232, 83, 0.12);
+  --s-block-a: rgba(0, 0, 0, 0.20);
+  --s-block-b: rgba(255, 255, 255, 0.06);
   --s-highlight: rgba(255, 204, 0, 0.22);
 
   /* Board grid lines (stronger contrast in dark mode) */
@@ -58,24 +59,29 @@ html.dark-mode {
 
 .pill {
   border: 1px solid var(--s-card-border);
-  border-radius: 999px;
+  border-radius: var(--s-radius);
   padding: 0.18rem 0.6rem;
   font-size: 0.78rem;
-  opacity: 0.9;
-  background: var(--s-card-bg);
+  opacity: 1;
+  background: transparent;
 }
 
 .pill--link {
   text-decoration: none;
 }
 
+/* Status pill is still used by JS state updates, but hidden in UI. */
+#conn-pill {
+  display: none;
+}
+
 .card {
   margin-top: 1rem;
   border: 1px solid var(--s-card-border);
-  background: var(--s-card-bg);
-  border-radius: 14px;
+  background: transparent;
+  border-radius: var(--s-radius);
   padding: 1rem;
-  backdrop-filter: blur(10px);
+  backdrop-filter: none;
 }
 
 .mode {
@@ -110,16 +116,19 @@ html.dark-mode {
   appearance: none;
   border: 1px solid var(--s-card-border);
   background: transparent;
-  color: inherit;
+  color: var(--s-strong);
   padding: 0.45rem 0.7rem;
-  border-radius: 10px;
+  border-radius: var(--s-radius);
   cursor: pointer;
   opacity: 0.9;
+  text-shadow: none !important;
+  -webkit-font-smoothing: antialiased;
 }
 
 .tab--active {
-  border-color: rgba(127,127,127,0.6);
-  box-shadow: 0 10px 30px rgba(0,0,0,0.08);
+  border-color: var(--s-accent);
+  color: var(--s-accent);
+  box-shadow: none;
 }
 
 .panel { display: none; }
@@ -141,14 +150,14 @@ html.dark-mode {
 .field__input {
   width: 100%;
   padding: 0.55rem 0.6rem;
-  border-radius: 10px;
+  border-radius: var(--s-radius);
   border: 1px solid var(--s-card-border);
-  background: rgba(255,255,255,0.75);
+  background: transparent;
   color: #111;
 }
 
 html.dark-mode .field__input {
-  background: rgba(0,0,0,0.25);
+  background: transparent;
   color: rgba(255,255,255,0.92);
 }
 
@@ -167,11 +176,15 @@ html.dark-mode .field__input {
 .btn {
   border: 1px solid var(--s-card-border);
   background: transparent;
-  color: inherit;
+  color: var(--s-strong);
+  font-family: inherit;
   padding: 0.5rem 0.75rem;
-  border-radius: 10px;
+  border-radius: var(--s-radius);
   cursor: pointer;
   transition: none;
+  text-shadow: none !important;
+  -webkit-font-smoothing: antialiased;
+  filter: none;
 }
 
 .btn:hover {
@@ -325,7 +338,7 @@ html.dark-mode .key:focus {
   max-width: 600px;
   box-sizing: border-box;
   border: 2px solid var(--s-box-line);
-  border-radius: 12px;
+  border-radius: 0;
   overflow: hidden;
 }
 
@@ -393,7 +406,7 @@ html.dark-mode .key:focus {
   align-items: center;
   justify-content: center;
   border: 1px solid var(--s-grid-line);
-  background: rgba(255,255,255,0.5);
+  background: var(--s-block-a);
   user-select: none;
   cursor: pointer;
   font-weight: 800;
@@ -402,29 +415,24 @@ html.dark-mode .key:focus {
 
 /* Subgrid styling (alternating 3x3 blocks) */
 .cell--block-a {
-  /* keep subtle; block separation is primarily via box lines */
-  background: inherit;
+  background: var(--s-block-a);
 }
 
 .cell--block-b {
-  background: inherit;
+  background: var(--s-block-b);
 }
 
 html.dark-mode .cell--block-a {
-  background: inherit;
+  background: var(--s-block-a);
 }
 
 html.dark-mode .cell--block-b {
-  background: inherit;
+  background: var(--s-block-b);
 }
 
 /* Highlight all identical numbers to selected cell */
 .cell--same {
   background: var(--s-highlight) !important;
-}
-
-html.dark-mode .cell {
-  background: rgba(0,0,0,0.14);
 }
 
 .cell--given {
@@ -464,7 +472,7 @@ html.dark-mode .cell--conflict {
 
 .keypad {
   border: 1px solid var(--s-card-border);
-  border-radius: 12px;
+  border-radius: 0;
   padding: 0.8rem;
   width: 100%;
   max-width: 180px;
@@ -488,7 +496,7 @@ html.dark-mode .keypad {
 
 .key {
   border: 1px solid rgba(127,127,127,0.35);
-  border-radius: 10px;
+  border-radius: 0;
   padding: 0.6rem 0;
   font-weight: 800;
   cursor: pointer;

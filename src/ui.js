@@ -109,7 +109,7 @@ export class SudokuUI {
       minDur: 1.4,
       maxDur: 2.4,
     });
-    showToast(this.toastEl, "Nice effort — your friend finished first!");
+    showToast(this.toastEl, "Nice effort - your friend finished first!");
   }
 
   setStartedAtMs(ms) {

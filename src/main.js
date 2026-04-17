@@ -219,7 +219,7 @@ function renderPlayers(room) {
     const div = document.createElement("div");
     div.className = "player";
     div.innerHTML = `
-      <div class="player-name">${label}: ${p?.name ? escapeHtml(p.name) : "—"}</div>
+      <div class="player-name">${label}: ${p?.name ? escapeHtml(p.name) : "-"}</div>
       <div class="player-meta">${p?.uid ? "Joined" : "Waiting"}${p?.finished ? " · Finished" : ""}</div>
     `.trim();
     return div;
@@ -245,7 +245,7 @@ function updateRoomUI(room) {
     return;
   }
 
-  elRoomId.textContent = session.roomId || "—";
+  elRoomId.textContent = session.roomId || "-";
   renderPlayers(room);
 
   const isHost = room.createdBy === session.uid;
@@ -303,8 +303,8 @@ function updateRoomUI(room) {
 function showGame(room) {
   showScreen("game");
 
-  elDifficulty.textContent = room.difficulty || "—";
-  elYou.textContent = session.name || "—";
+  elDifficulty.textContent = room.difficulty || "-";
+  elYou.textContent = session.name || "-";
 
   const { puzzle, solution } = parsePuzzle(room);
   const state = createInitialState(puzzle, solution);
@@ -406,8 +406,8 @@ async function init() {
       const finalSolvedElapsedMs = solvedElapsedMs ?? derivedSolvedElapsedMs;
 
       singleName.value = game.name || "";
-      elDifficulty.textContent = game.difficulty || "—";
-      elYou.textContent = game.name || "—";
+      elDifficulty.textContent = game.difficulty || "-";
+      elYou.textContent = game.name || "-";
 
       if (ui) ui.unmount();
       ui = new SudokuUI({
